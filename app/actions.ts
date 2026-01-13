@@ -10,15 +10,14 @@ export async function generateRecipe(dishName: string) {
   }
 
   try {
-    // ⚠️ 修改点 1：换用最稳定的 "gemini-pro" 模型
-    // ⚠️ 修改点 2：去掉 responseMimeType 配置（因为老模型不支持这个参数，加上会报错）
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    // ⚠️ 终极修正：使用 gemini-1.5-flash，但去掉所有花哨配置
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
+    // 提示词：强制 AI 只吐出 JSON，不要废话
     const prompt = `
       你是一个特级中餐大厨。请教我做一道菜："${dishName}"。
       
-      请务必只返回纯 JSON 字符串，不要包含 Markdown 标记（如 \`\`\`json ），不要包含任何其他文字。
-      格式如下：
+      请直接返回一个纯 JSON 字符串，格式如下：
       {
         "id": "ai-${Date.now()}",
         "name": "${dishName}",
@@ -30,22 +29,28 @@ export async function generateRecipe(dishName: string) {
         ],
         "instructions": "这里写详细的烹饪步骤，分行写。"
       }
+      
+      注意：不要使用 Markdown 格式（不要写 \`\`\`json），直接以 { 开头，以 } 结尾。
     `;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const text = response.text();
 
-    // 数据清洗：有时候 AI 会忍不住加 markdown 符号，我们手动去掉它
-    const cleanText = text.replace(/```json|```/g, "").trim();
-
+    // 手动清洗数据：防止 AI 还是不听话加了 markdown
+    let cleanText = text.trim();
+    if (cleanText.startsWith("```json")) {
+      cleanText = cleanText.replace(/^```json/, "").replace(/```$/, "");
+    } else if (cleanText.startsWith("```")) {
+      cleanText = cleanText.replace(/^```/, "").replace(/```$/, "");
+    }
+    
+    // 尝试解析
     const recipe = JSON.parse(cleanText);
     return { success: true, data: recipe };
 
   } catch (error: any) {
     console.error("AI 生成报错:", error);
-    
-    // 如果 gemini-pro 也失败了，把具体原因返回出来
-    return { error: `AI 报错: ${error.message || "未知错误"}` };
+    return { error: `AI 报错 (Flash): ${error.message}` };
   }
 }
