@@ -10,15 +10,15 @@ export async function generateRecipe(dishName: string) {
   }
 
   try {
-    // 1. 使用 JSON 模式，这能让 AI 100% 返回合法的 JSON，不会乱说话
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
-      generationConfig: { responseMimeType: "application/json" } 
-    });
+    // ⚠️ 修改点 1：换用最稳定的 "gemini-pro" 模型
+    // ⚠️ 修改点 2：去掉 responseMimeType 配置（因为老模型不支持这个参数，加上会报错）
+    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
     const prompt = `
       你是一个特级中餐大厨。请教我做一道菜："${dishName}"。
-      请严格按照以下 JSON 格式返回数据：
+      
+      请务必只返回纯 JSON 字符串，不要包含 Markdown 标记（如 \`\`\`json ），不要包含任何其他文字。
+      格式如下：
       {
         "id": "ai-${Date.now()}",
         "name": "${dishName}",
@@ -36,16 +36,16 @@ export async function generateRecipe(dishName: string) {
     const response = await result.response;
     const text = response.text();
 
-    // 2. 直接解析，不需要再做正则替换了，因为 JSON 模式很干净
-    const recipe = JSON.parse(text);
+    // 数据清洗：有时候 AI 会忍不住加 markdown 符号，我们手动去掉它
+    const cleanText = text.replace(/```json|```/g, "").trim();
+
+    const recipe = JSON.parse(cleanText);
     return { success: true, data: recipe };
 
   } catch (error: any) {
-    console.error("AI 生成详细报错:", error);
+    console.error("AI 生成报错:", error);
     
-    // 3. ⚠️ 关键修改：把真实的错误信息返回给前端，方便调试
-    // 如果是 API Key 问题，这里会直接显示 "API key not valid"
-    // 如果是模型问题，会显示 "User location not supported" 等
-    return { error: `AI 报错: ${error.message || JSON.stringify(error)}` };
+    // 如果 gemini-pro 也失败了，把具体原因返回出来
+    return { error: `AI 报错: ${error.message || "未知错误"}` };
   }
 }
